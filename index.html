@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AuraSplat technical overview: image-conditioned appearance transfer for feed-forward Gaussian driving scenes.">
+  <meta name="theme-color" content="#343434">
+  <meta property="og:title" content="AuraSplat: Image-Conditioned Appearance Transfer for Driving Scenes">
+  <meta property="og:description" content="One reference image conditions a feed-forward Gaussian reconstruction across cameras and time.">
+  <meta property="og:image" content="https://carizon-gaia.github.io/aurasplat/assets/figures/hero.jpg">
+  <title>AuraSplat: Image-Conditioned Appearance Transfer for Driving Scenes</title>
+  <link rel="stylesheet" href="./styles.css?v=20261123-aurasplat">
+  <script src="./media.js?v=20261123-aurasplat" defer></script>
+  <script src="./site.js?v=20261123-aurasplat" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="header-inner wrap">
+      <a class="brand" href="#top" aria-label="Carizon · AuraSplat, back to top">
+        <img class="brand-logo" src="./logo.jpg.png" width="1448" height="360" alt="Carizon">
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span>Aura<span class="brand-light">Splat</span></span>
+      </a>
+      <nav class="desktop-nav" aria-label="Page navigation">
+        <a href="#overview">Overview</a><a href="#method">Method</a><a href="#results">Results</a><a href="#limitations">Limitations &amp; FAQ</a>
+      </nav>
+      <nav class="language-switch" aria-label="Language">
+        <a href="./index-zh.html" lang="zh-CN" hreflang="zh-CN">中文</a><a href="./index.html" lang="en" hreflang="en" aria-current="page">EN</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="top" aria-labelledby="hero-title">
+      <div class="hero-kicker"><span class="status-dot"></span> REFERENCE-CONDITIONED APPEARANCE TRANSFER <span class="kicker-line"></span> AURASPLAT</div>
+      <h1 id="hero-title" class="technical-hero-title project-title" lang="en">AuraSplat: <span>Image-Conditioned Appearance Transfer for Driving Scenes via Feed-Forward Gaussians</span></h1>
+      <div class="project-credits" aria-label="Authors and affiliations">
+        <p class="project-authors" lang="en">Xu Wang<sup>1</sup>, Shucheng Gong<sup>2</sup>, Zhang Jinwei<sup>2</sup>, Chi Zhu<sup>3</sup>, Jing Wang<sup>2</sup>, Weiwei Liu<sup>2</sup>, Chang Huang<sup>2</sup></p>
+        <p class="project-affiliations" lang="en"><span><sup>1</sup> Beihang University (<a href="https://www.buaa.edu.cn/">buaa.edu.cn</a>)</span><span><sup>2</sup> Carizon (<a href="https://www.carizon.com/#/">www.carizon.com</a>)</span><span><sup>3</sup> Hangzhou Dianzi University (<a href="https://www.hdu.edu.cn/">hdu.edu.cn</a>)</span></p>
+        <p class="paper-availability">PDF not yet available</p>
+      </div>
+      <!-- <div class="hero-bottom">
+        <div class="hero-description">
+          <p class="hero-en">AuraSplat<br>Technical Overview</p>
+          <p>Given multi-view driving images and a reference image from an arbitrary scene, AuraSplat reconstructs the scene as 3D Gaussians and transfers the reference appearance to every camera and time step in one feed-forward pass.</p>
+        </div>
+        <div class="hero-actions"><a class="button button-dark" href="#method">Method <span aria-hidden="true">↗</span></a><a class="button button-outline" href="#results">Results <span aria-hidden="true">↓</span></a></div>
+      </div> -->
+      <!-- <div class="hero-media" data-media-slot="hero" data-media-label="AuraSplat overview" data-media-aspect="wide">
+        <div class="hero-media-inner">
+          <div class="hero-grid" aria-hidden="true"></div>
+          <div class="hero-rings" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div class="hero-cross hero-cross-one" aria-hidden="true">+</div><div class="hero-cross hero-cross-two" aria-hidden="true">+</div>
+          <div class="hero-media-top"><span>PROJECT OVERVIEW / 01</span><span>REFERENCE → DRIVING SCENE</span></div>
+          <div class="hero-media-center"><span class="play-outline" aria-hidden="true">◎</span><strong>AuraSplat overview</strong><span>FIGURE PLACEHOLDER</span></div>
+          <div class="hero-media-bottom"><span>Multi-view input <b>→</b> Gaussian scene <b>→</b> Reference-conditioned appearance</span><span>MANUSCRIPT FIGURE</span></div>
+        </div>
+      </div> -->
+      <!-- <p class="media-caption"><span><span class="caption-dot"></span> Reference-conditioned appearance transfer</span><span>One reference image · all cameras</span></p> -->
+    </section>
+
+    <section class="section intro-section" id="overview" aria-labelledby="overview-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">01 / OVERVIEW</span><span class="aside-line"></span><span class="aside-note">THE IDEA</span></div>
+        <div class="section-main">
+          <p class="eyebrow">PROBLEM FORMULATION</p>
+          <h2 id="overview-title">From captured appearance<br>to <span class="text-muted">controllable driving scenes.</span></h2>
+          <div class="intro-copy">
+            <p class="lead">Goal: adapt a feed-forward driving reconstruction to a reference appearance that was never observed at that location.</p>
+            <p>Driving simulation needs scenes under rain, snow, night, and other rare conditions. Feed-forward Gaussian reconstruction is fast, but it reproduces only the weather captured at recording time; re-observing every location under every condition is costly and often impossible. Editing each camera view independently with a diffusion model is slow and can produce appearances that disagree across overlapping views, while per-scene optimization is expensive.</p>
+            <p>AuraSplat reconstructs the scene once and transfers appearance from a reference image that may depict a different scene. A fine-tuned DINOv2 encoder turns the reference into a global appearance code. A small MLP converts this code into channel-wise modulation for the scene tokens and multiple color-decoder stages, and the decoder predicts bounded per-pixel RGB gain and bias maps. These maps update Gaussian colors while geometry, opacity, and camera pose stay fixed.</p>
+          </div>
+          <figure class="source-figure overview-figure">
+            <div class="source-figure-heading"><span>PROJECT OVERVIEW</span></div>
+            <a href="./assets/figures/overview_teaser.jpg" aria-label="View the original AuraSplat teaser"><img src="./assets/figures/overview_teaser.jpg" width="1800" height="646" loading="lazy" alt="AuraSplat teaser: multi-view images are reconstructed as geometry and appearance; reference images specify sunset, snow, night, and rain appearances for multi-view rendering."></a>
+            <figcaption>One reconstruction, many appearances. The same geometry is rendered under sunset, snow, night, and rain using a single reference image per condition; only Gaussian colors change.</figcaption>
+          </figure>
+          <div class="principles" aria-label="Core techniques">
+            <article><span class="principle-index">01 / RECONSTRUCTION</span><h3>Feed-forward Gaussians</h3><p>A frozen Pi3 backbone supplies depth and multi-scale features; a trainable Gaussian head builds the scene in a single pass, without per-scene optimization.</p></article>
+            <article><span class="principle-index">02 / CONDITIONING</span><h3>Global appearance code</h3><p>CLS tokens from several DINOv2 layers form a high-dimensional reference code that is shared by every camera and every Gaussian.</p></article>
+            <article><span class="principle-index">03 / TRANSFER</span><h3>Bounded RGB update</h3><p>Reference-conditioned AdaLN and a color decoder predict gain and bias maps that adjust Gaussian colors while preserving scene geometry.</p></article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section method-section" id="method" aria-labelledby="method-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">02 / METHOD</span><span class="aside-line"></span><span class="aside-note">HOW IT WORKS</span></div>
+        <div class="section-main">
+          <p class="eyebrow">TWO-BRANCH DESIGN</p>
+          <h2 id="method-title">Reference-conditioned<br>appearance transfer.</h2>
+          <div class="intro-copy">
+            <p class="lead">A reconstruction branch builds the Gaussian scene; an appearance branch conditions its colors on one reference image.</p>
+            <p><strong>Stage I · Reconstruction.</strong> The synchronized camera views enter a frozen Pi3 backbone, which provides per-view depth maps and multi-scale features. A trainable Gaussian head turns these outputs into a shared Gaussian scene.</p>
+            <p><strong>Stage II · Appearance.</strong> A reference image, possibly from a different scene, is encoded by a fine-tuned DINOv2-S/14 into a global code. The code modulates scene content tokens through adaptive layer normalization and conditions multiple stages of a DPT-style color decoder. The decoder predicts pixel-aligned RGB gain and bias maps that update the colors of the Gaussians that generated each pixel.</p>
+          </div>
+          <figure class="pipeline-figure">
+            <a href="./assets/figures/pipeline.png" aria-label="View the original AuraSplat pipeline"><img src="./assets/figures/pipeline.png" width="2000" height="835" loading="lazy" alt="AuraSplat pipeline: multi-view images pass through a frozen Pi3 backbone and a Gaussian head; a reference image is encoded by DINOv2 into a global appearance code that modulates content tokens and multiple color-decoder stages, predicting RGB gain and bias for Gaussian colors."></a>
+            <figcaption>Multi-view images → frozen Pi3 backbone → Gaussian head.<br>Reference image → DINOv2 → global code → AdaLN and color decoder → bounded RGB update of Gaussian colors.</figcaption>
+          </figure>
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">MOTIVATION</span><h3>Weather edits share a direction</h3></div><p>Across many edited pairs, feature changes induced by each weather condition are correlated across scenes. This motivates conditioning on a global appearance code while keeping spatial source features to decide how the change is expressed locally.</p></div>
+            <figure class="source-figure compact-figure">
+              <div class="source-figure-heading"><span>EDIT DIRECTION / PCA</span></div>
+              <a href="./assets/figures/pca.png" aria-label="View the original PCA plot of feature changes"><img src="./assets/figures/pca.png" width="1200" height="572" loading="lazy" alt="PCA of mean feature differences, with arrows showing weather means."></a>
+              <figcaption>PCA of mean-feature differences; arrows mark weather means. Within a weather class the edit direction is shared across scenes.</figcaption>
+            </figure>
+          </div>
+
+          
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">GAUSSIAN COLOR UPDATE</span><h3>Geometry stays fixed</h3></div><p>Each Gaussian keeps its generating camera and pixel, and its source color. The predicted coefficients are bounded per channel. The final convolution is zero-initialized, so the branch starts from the source colors, and only RGB is updated.</p></div>
+          </div>
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">TRAINING TARGETS</span><h3>Supervision from edited views</h3></div><p>Source images supervise reconstruction and preserve the captured appearance; edited targets supervise transfer. Targets come from independent per-view edits or from a shared cylindrical canvas built with LiDAR depth, which gives the diffusion model common context across overlapping cameras. References are synthesized from each target with simple augmentations, and training combines reconstruction and perceptual losses.</p></div>
+            <figure class="source-figure compact-figure">
+              <div class="source-figure-heading"><span>TRAINING TARGETS</span></div>
+              <a href="./assets/figures/aug_compare.jpg" aria-label="View the original training-target comparison"><img src="./assets/figures/aug_compare.jpg" width="1200" height="1328" loading="lazy" alt="Front, front-left and front-right views before editing, after independent per-view editing, and after shared-canvas editing."></a>
+              <figcaption>Front, front-left, and front-right views before editing, after independent edits, and after shared-canvas editing. The shared canvas keeps overlapping regions consistent.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section results-section" id="results" aria-labelledby="results-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">03 / RESULTS</span><span class="aside-line"></span><span class="aside-note">EXPERIMENTS</span></div>
+        <div class="section-main">
+          <div class="section-heading-row results-heading"><div><p class="eyebrow">EXPERIMENTAL RESULTS</p><h2 id="results-title">Appearance transfer across<br>cameras, frames, and scenes.</h2></div></div>
+
+          
+
+          
+
+          
+
+          
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>QUALITATIVE COMPARISON</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="qualitative" viewBox="0 0 926.00 868.00" style="max-width:900px">
+  <text x="78.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">origin</text>
+  <text x="232.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Stylos</text>
+  <text x="386.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">WildSplatter</text>
+  <text x="540.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Styl3R</text>
+  <text x="694.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Ours</text>
+  <text x="848.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">target</text>
+  <image x="4.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/ca930595bcfe.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/fd57c990c035.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2e4411192b01.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/9fb606daf0b7.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/0f558deb784e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/910b90659ab3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/641d025c9c63.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/acf90cf30546.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b8556f8f9a87.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b9f4c7627097.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4eaca80e9595.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d6700d4d3a73.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4edf2b167a6d.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/3db09b629d2b.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/73b1e354d81f.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/cbb1320a24f3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4716876f2aa8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6cbe3dbd309c.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6e2b293f9c24.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d788d573941a.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c889efde8af6.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/eb6d4a7a25a8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2614d062053e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/87dd0ad5359e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/5a33fb66cea6.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/06fbc4b73bff.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/88ccba50b0fe.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/471dd88b4195.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/61d842434bf3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d80cbbc4e4a3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/e581e0a37652.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/f386e263002e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b6c3f21f1c92.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c0faf8ce5188.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d90cb3a81331.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/0bb03e0dfe8c.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/8a184deb3022.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/9b67ec0e2106.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/651538c2d5e8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/98dc211dc633.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/40f3b0a2e1f9.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6378c6cc5ec9.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/7ba8dd979805.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2b089dcda318.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b8af2a820507.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c459a59529f0.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/8d72561e499d.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/5725e06abd35.jpg" preserveAspectRatio="xMidYMid slice"/>
+</svg>
+            <figcaption>Source, Stylos, WildSplatter, Styl3R, AuraSplat, and reference/target. AuraSplat follows the warm tones of sunset and the darkness of night while retaining buildings, vegetation, and vehicles.</figcaption>
+          </figure>
+
+          
+
+          <figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>APPEARANCE INTERPOLATION</span></div>
+            <a href="./assets/figures/interpolation.jpg" aria-label="View the original appearance-interpolation figure"><img src="./assets/figures/interpolation.jpg" width="1600" height="1623" loading="lazy" alt="Interpolating between sunny, snowy, overcast and sunset references produces gradual changes in sky color and illumination for one reconstructed scene."></a>
+            <figcaption>Interpolating between reference conditions produces gradual changes in sky color, illumination, and surface appearance for the same reconstruction. Reference images depict different scenes.</figcaption>
+          </figure>
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>NOVEL VIEWS</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="novel view" viewBox="0 0 1148.00 412.00" style="max-width:1000px">
+  <image x="248.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/c84ad3360ea3.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/cf2220b61f05.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/e0c1769da8f3.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b1743de4cf50.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/d2f07fbf3e5c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/d83d40e9e2c6.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/a32caa4ad03a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b4c71f59f5e0.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/1d0058e10aa5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/f2163cc59770.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/f74bc1023d01.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/476e22b4a577.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="90.00" y="258.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">left shift 2m</text>
+  <text x="90.00" y="362.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">right shift 2m</text>
+  <image x="690.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/882be68a71a5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="690.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/bdc24e59592a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="690.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/399202dc9837.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="778.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/5d88e385f9ef.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b8fed2f950be.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/62c174458535.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/48a39a602572.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="930.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/8b3c724f267d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/8c8a5544cf9c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/3d2e27d0e931.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/50341dd3757c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="1082.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/fce0b1dd2bf1.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="684.00" y="206.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">left shift 2m</text>
+  <text x="684.00" y="310.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">right shift 2m</text>
+</svg>
+            <figcaption>Renders from laterally shifted poses. Appearance transfer stays consistent across the shifted viewpoints and multiple cameras.</figcaption>
+          </figure>
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>TEMPORAL &amp; MULTI-CAMERA</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="nuscene" viewBox="0 0 530.00 542.00" style="max-width:626px">
+  <image x="216.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/a914cd9fdfed.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/c01a0b092aaf.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/f6e53f936b4f.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/0342d7fabe46.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/5de1d2cc04f8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/2e11cfe4a25b.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/f0798beb9e75.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/4ece7f6a25e5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/de6b685baa1a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/144adcf6efa1.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/57f87303a77d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/72703fac5de4.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/4eeb8591d47b.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/7520058ab08d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/bf21275874ff.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="130.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front Left</text>
+  <text x="290.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front</text>
+  <text x="450.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front Right</text>
+  <text x="34.00" y="86.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=0s</text>
+  <text x="34.00" y="186.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=0s</text>
+  <text x="34.00" y="286.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=4s</text>
+  <text x="34.00" y="386.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=8s</text>
+  <text x="34.00" y="486.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=12s</text>
+</svg>
+            <figcaption>The Waymo-trained model is applied directly to nuScenes. Columns: front-left, front, front-right. Top: source; below: adapted views at successive timestamps under the same reference.</figcaption>
+          </figure>
+          
+
+
+
+          
+
+          
+
+          <section class="paper-section">
+            <div class="paper-heading"><div><span class="tech-kicker">AUGMENTATION GALLERY</span><h3>One reference set across scenes</h3></div><p>Waymo and nuScenes scenes under the same references; rows alternate source and reference-conditioned results.</p></div>
+            <div class="paper-image-grid two-up">
+              <figure class="paper-tile"><a href="./assets/figures/aug_s3.jpg" aria-label="View the Waymo · s3 panel"><img src="./assets/figures/aug_s3.jpg" width="1200" height="1374" loading="lazy" alt="Waymo scene with reference conditions."></a><figcaption>Waymo · s3</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_s0.jpg" aria-label="View the Waymo · s0 panel"><img src="./assets/figures/aug_s0.jpg" width="1200" height="1374" loading="lazy" alt="Waymo scene with reference conditions."></a><figcaption>Waymo · s0</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_s6.jpg" aria-label="View the Waymo · s6 panel"><img src="./assets/figures/aug_s6.jpg" width="1200" height="1374" loading="lazy" alt="Waymo scene with reference conditions."></a><figcaption>Waymo · s6</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n0.jpg" aria-label="View the nuScenes · n0 panel"><img src="./assets/figures/aug_n0.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes scene with reference conditions."></a><figcaption>nuScenes · n0</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n1.jpg" aria-label="View the nuScenes · n1 panel"><img src="./assets/figures/aug_n1.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes scene with reference conditions."></a><figcaption>nuScenes · n1</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n3.jpg" aria-label="View the nuScenes · n3 panel"><img src="./assets/figures/aug_n3.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes scene with reference conditions."></a><figcaption>nuScenes · n3</figcaption></figure>
+            </div>
+            <p class="tech-caption">Forward cameras per row; the reference used by each row appears in the left margin of the full panel.</p>
+          </section>
+                    <section class="paper-section video-section">
+            <div class="paper-heading"><div><span class="tech-kicker">VIDEO RESULTS</span><h3>Appearance transfer across a sequence.</h3></div><p>Every scene and condition in one front-camera strip, plus a three-view video per scene. The sequences are per-frame reconstructions played back in order.</p></div>
+            <figure class="source-figure video-figure">
+              <div class="source-figure-heading"><span>FRONT CAMERA · ALL CONDITIONS</span><span>All scenes</span></div>
+              <video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/front_strip.jpg" aria-label="Front-camera strip video">
+                <source src="./assets/videos/front_strip.mp4" type="video/mp4">
+              </video>
+              <figcaption>Each scene in turn. Columns are the source, clean (nuScenes only), and the reference conditions, all on the front camera.</figcaption>
+            </figure>
+            <div class="paper-image-grid two-up">
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_s3.jpg" aria-label="Three-view video, Waymo · s3"><source src="./assets/videos/three_view_s3.mp4" type="video/mp4"></video><figcaption>Waymo · s3</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_s0.jpg" aria-label="Three-view video, Waymo · s0"><source src="./assets/videos/three_view_s0.mp4" type="video/mp4"></video><figcaption>Waymo · s0</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_n0.jpg" aria-label="Three-view video, nuScenes · n0"><source src="./assets/videos/three_view_n0.mp4" type="video/mp4"></video><figcaption>nuScenes · n0</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_n1.jpg" aria-label="Three-view video, nuScenes · n1"><source src="./assets/videos/three_view_n1.mp4" type="video/mp4"></video><figcaption>nuScenes · n1</figcaption></figure>
+            </div>
+            <p class="tech-caption">Each video plays the timeline once; the condition changes as time advances, from the source through clean (nuScenes) and the references across the forward cameras.</p>
+          </section>
+<details class="paper-case metrics-fold"><summary>Quantitative results</summary><div class="paper-case-content">
+<div class="reported-results" aria-labelledby="reported-results-title">
+            <div class="reported-header"><div><span class="tech-kicker">REPORTED RESULTS</span><h3 id="reported-results-title">Summary</h3></div></div>
+            <div class="reported-grid">
+              <article><strong>23.34 dB ↑</strong><span>PSNR · adapted, aligned reference</span><small>Stylos: 18.77 dB at the same resolution</small></article>
+              <article><strong>0.766 ↑</strong><span>Edge correlation</span><small>Stylos: 0.547; source renders: 0.845</small></article>
+              <article><strong>+9.22 dB ↑</strong><span>Gain over source rendering</span><small>WildSplatter +5.00, Stylos +4.77</small></article>
+              <article><strong>0.64–0.68 s</strong><span>Full pipeline on an H20-3e GPU</span><small>Reconstruction, reference encoding, and ten renders</small></article>
+            </div>
+            <p>Reference-conditioned transfer is evaluated against diffusion-edited targets; the source render is the same reconstruction before transfer.</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>Appearance transfer comparison</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="Appearance transfer comparison" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">Method</th><th scope="col">Output</th><th scope="col">PSNR ↑</th><th scope="col">Edge ↑</th><th scope="col">CLIP ↑</th></tr></thead>
+                <tbody>
+                  <tr><th scope="rowgroup" colspan="5">Aligned reference · 518 × 350</th></tr>
+                  <tr><th scope="row">WildSplatter</th><td>Source</td><td>13.47</td><td>0.810</td><td>0.7689</td></tr>
+                  <tr><th scope="row">WildSplatter</th><td>Adapted</td><td>18.47</td><td>0.498</td><td>0.7804</td></tr>
+                  <tr><th scope="row">Stylos</th><td>Source</td><td>14.00</td><td>0.846</td><td>0.8403</td></tr>
+                  <tr><th scope="row">Stylos</th><td>Adapted</td><td>18.77</td><td>0.547</td><td>0.8193</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>Source</td><td>14.12</td><td>0.845</td><td>0.8384</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>Adapted</td><td><strong>23.34</strong></td><td><strong>0.766</strong></td><td><strong>0.9128</strong></td></tr>
+                  <tr><th scope="rowgroup" colspan="5">Aligned reference · 256 × 256</th></tr>
+                  <tr><th scope="row">Styl3R</th><td>Source</td><td>12.55</td><td>0.748</td><td>0.8358</td></tr>
+                  <tr><th scope="row">Styl3R</th><td>Adapted</td><td>17.75</td><td>0.828</td><td>0.8684</td></tr>
+                  <tr><th scope="rowgroup" colspan="5">Cross-scene reference · 518 × 350</th></tr>
+                  <tr><th scope="row">AuraSplat</th><td>Adapted</td><td>20.16</td><td>0.746</td><td>0.9015</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">Aligned reference: the current frame's edited target is the reference. Cross-scene: one fixed reference per weather from a different scene. AuraSplat keeps reconstruction quality (source row) and improves transfer fidelity over the baselines.</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>Results by weather</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="Appearance transfer results by weather" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">Weather (frames)</th><th scope="col">AuraSplat PSNR</th><th scope="col">AuraSplat Edge</th><th scope="col">WildSplatter PSNR</th><th scope="col">WildSplatter Edge</th><th scope="col">Stylos PSNR</th><th scope="col">Stylos Edge</th><th scope="col">Styl3R PSNR</th><th scope="col">Styl3R Edge</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">Night (2017)</th><td>24.47</td><td>0.580</td><td>21.62</td><td>0.261</td><td>20.88</td><td>0.351</td><td>19.84</td><td>0.654</td></tr>
+                  <tr><th scope="row">Sunset (1522)</th><td>24.71</td><td>0.884</td><td>18.41</td><td>0.599</td><td>19.10</td><td>0.648</td><td>19.62</td><td>0.892</td></tr>
+                  <tr><th scope="row">Rain (1453)</th><td>21.54</td><td>0.769</td><td>17.46</td><td>0.551</td><td>17.50</td><td>0.565</td><td>17.09</td><td>0.849</td></tr>
+                  <tr><th scope="row">Snow (1514)</th><td>22.34</td><td>0.803</td><td>16.85</td><td>0.650</td><td>17.55</td><td>0.647</td><td>14.64</td><td>0.918</td></tr>
+                  <tr><th scope="row">Sunny (1370)</th><td>23.17</td><td>0.866</td><td>16.77</td><td>0.510</td><td>18.01</td><td>0.595</td><td>16.72</td><td>0.893</td></tr>
+                  <tr><th scope="row">Weighted mean</th><td><strong>23.34</strong></td><td><strong>0.766</strong></td><td>18.47</td><td>0.498</td><td>18.77</td><td>0.547</td><td>17.75</td><td>0.828</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">Each frame uses its own edited front target as reference and is scored against it. Styl3R renders at 256 × 256; the other methods at 518 × 350.</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>Reconstruction quality</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="Reconstruction comparison" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">Method</th><th scope="col">PSNR ↑</th><th scope="col">SSIM ↑</th><th scope="col">LPIPS ↓</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">MVSplat</th><td>22.04</td><td>0.68</td><td>0.34</td></tr>
+                  <tr><th scope="row">DepthSplat</th><td>23.86</td><td>0.70</td><td>0.31</td></tr>
+                  <tr><th scope="row">UniSplat</th><td>25.98</td><td>0.76</td><td>0.24</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>25.45</td><td><strong>0.77</strong></td><td><strong>0.23</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">Original-appearance rendering at several camera poses from a subsequent timestamp, following the UniSplat protocol; baseline numbers are reported by UniSplat.</p>
+          </div>
+</div></details>
+
+          
+
+          
+        </div>
+      </div>
+    </section>
+
+    <section class="section details-section" id="details" aria-labelledby="details-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">04 / DETAILS</span><span class="aside-line"></span><span class="aside-note">UNDER THE HOOD</span></div>
+        <div class="section-main">
+          <p class="eyebrow">IMPLEMENTATION &amp; EVALUATION</p>
+          <h2 id="details-title">Implementation and evaluation.</h2>
+          <div class="spec-grid">
+            <article><span class="spec-id">A / GEOMETRY</span><h3>Pi3 + Gaussian head</h3><p>The synchronized cameras enter a frozen Pi3 backbone. A trainable Gaussian head builds the scene. Original-appearance reconstruction reaches 25.45 dB PSNR, 0.77 SSIM, and 0.23 LPIPS on Waymo.</p><div class="spec-foot">FROZEN PI3 · TRAINABLE HEAD · 5 VIEWS</div></article>
+            <article><span class="spec-id">B / APPEARANCE BRANCH</span><h3>26.59 M parameters</h3><p>A fine-tuned DINOv2-S/14 produces a 1536-d code from layers {2, 5, 8, 11}. The branch contains an 11.58 M conditioning MLP, a 9.55 M color decoder, 4.20 M content projections, and a 0.79 M reference projection.</p><div class="spec-foot">DINOV2-S/14 · ADALN · 3 STAGES</div></article>
+            <article><span class="spec-id">C / TRAINING &amp; SPEED</span><h3>0.64–0.68 s</h3><p>The model has 1,148.88 M parameters, 175.46 M trainable, and trains for five epochs. On an H20-3e GPU the full pipeline takes 0.64–0.68 s per appearance condition at batch size one.</p><div class="spec-foot">1.15 B TOTAL · 5 EPOCHS · H20-3E</div></article>
+          </div>
+          <div class="scope-note"><strong>Evaluation scope</strong><p>Transfer numbers use 7,876 evaluation samples from 202 Waymo scenes, scored on the front camera at 518 × 350 against diffusion-edited targets.</p></div>
+          <div class="technical-link"><div><span>EXPLORE THE METHOD</span><p>Read the pipeline, modulation, and training details.</p></div><a href="#method">Explore the method <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section limitations-section" id="limitations" aria-labelledby="limitations-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">05 / DISCUSSION</span><span class="aside-line"></span><span class="aside-note">LIMITATIONS &amp; FAQ</span></div>
+        <div class="section-main">
+          <p class="eyebrow">LIMITATIONS &amp; DESIGN CHOICES</p>
+          <h2 id="limitations-title">Failure cases and discussion.</h2>
+          <p class="body-copy">Appearance generalization follows the training distribution. Updates are RGB-only, which gives global reference control without explicit material or spatially varying illumination control. Dynamic objects depend on reconstruction and diffusion-target quality, and novel views can expose reconstruction gaps.</p>
+          <div class="failure-cases">
+            <span class="tech-kicker">DISCUSSION</span>
+            <details class="paper-case" open><summary>Dynamic objects and instance editing</summary><div class="paper-case-content"><p class="paper-copy">Moving objects inherit errors from the reconstruction and from the edited targets, and the current update is global: one reference sets the appearance of the whole scene, so separate objects or regions cannot receive different appearances.</p></div></details>
+            <details class="paper-case"><summary>Reference specificity</summary><div class="paper-case-content"><p class="paper-copy">Different same-weather references produce different outputs. Different references shift tone and brightness, but the variation stays well below the change from the source appearance; the weather class dominates.</p></div></details>
+            <details class="paper-case"><summary>New viewpoints</summary><div class="paper-case-content"><p class="paper-copy">Rendering far from the input poses, or filling regions that were never observed, can expose reconstruction gaps that appearance transfer cannot repair.</p></div></details>
+          </div>
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">FAQ</span><h3>Common questions</h3></div><p>Short answers about the protocol.</p></div>
+            <details class="paper-case"><summary>Does inference require per-scene optimization?</summary><div class="paper-case-content"><p class="paper-copy">No. Reconstruction and appearance transfer run feed-forward.</p></div></details>
+            <details class="paper-case"><summary>Must the reference come from the same scene?</summary><div class="paper-case-content"><p class="paper-copy">No. The reference can come from a different scene. The transfer still follows its appearance, although the match can be less precise than when the reference shares the scene.</p></div></details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing-section">
+      <div class="wrap closing-inner">
+        <div><p class="eyebrow">AURASPLAT / TECHNICAL SUMMARY</p><h2>Image-conditioned appearance.<br><span>Feed-forward Gaussian rendering.</span></h2></div>
+        <div class="closing-right"><p>AuraSplat</p><a href="#top">Back to top <span aria-hidden="true">↑</span></a></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner"><span class="footer-brand">AuraSplat<span>.</span></span><p>AuraSplat · Driving-scene appearance transfer research.</p><span>PROJECT PAGE</span></div>
+  </footer>
+</body>
+</html>

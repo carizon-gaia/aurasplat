@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AuraSplat 技术概览：面向驾驶场景的前馈高斯重建，以单张参考图像控制外观。">
+  <meta name="theme-color" content="#343434">
+  <meta property="og:title" content="AuraSplat：基于前馈高斯的驾驶场景图像条件外观迁移">
+  <meta property="og:description" content="一张参考图像即可控制前馈高斯重建在相机与时间上的外观。">
+  <meta property="og:image" content="https://carizon-gaia.github.io/aurasplat/assets/figures/hero.jpg">
+  <title>AuraSplat：基于前馈高斯的驾驶场景图像条件外观迁移</title>
+  <link rel="stylesheet" href="./styles.css?v=20261123-aurasplat">
+  <script src="./media.js?v=20261123-aurasplat" defer></script>
+  <script src="./site.js?v=20261123-aurasplat" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+
+  <header class="site-header">
+    <div class="header-inner wrap">
+      <a class="brand" href="#top" aria-label="Carizon · AuraSplat，回到顶部">
+        <img class="brand-logo" src="./logo.jpg.png" width="1448" height="360" alt="Carizon">
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span>Aura<span class="brand-light">Splat</span></span>
+      </a>
+      <nav class="desktop-nav" aria-label="页面导航">
+        <a href="#overview">项目概览</a><a href="#method">方法架构</a><a href="#results">实验结果</a><a href="#limitations">局限与问答</a>
+      </nav>
+      <nav class="language-switch" aria-label="语言">
+        <a href="./index-zh.html" lang="zh-CN" hreflang="zh-CN" aria-current="page">中文</a><a href="./index.html" lang="en" hreflang="en">EN</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="top" aria-labelledby="hero-title">
+      <div class="hero-kicker"><span class="status-dot"></span> 参考图像条件的外观迁移 <span class="kicker-line"></span> AURASPLAT</div>
+      <h1 id="hero-title" class="technical-hero-title project-title" lang="zh-CN">AuraSplat：<span>基于前馈高斯的驾驶场景<br>图像条件外观迁移</span></h1>
+      <div class="project-credits" aria-label="作者与单位">
+        <p class="project-authors" lang="en">Xu Wang<sup>1</sup>, Shucheng Gong<sup>2</sup>, Zhang Jinwei<sup>2</sup>, Chi Zhu<sup>3</sup>, Jing Wang<sup>2</sup>, Weiwei Liu<sup>2</sup>, Chang Huang<sup>2</sup></p>
+        <p class="project-affiliations" lang="zh-CN"><span><sup>1</sup> 北京航空航天大学（<a href="https://www.buaa.edu.cn/">buaa.edu.cn</a>）</span><span><sup>2</sup> Carizon（<a href="https://www.carizon.com/#/">www.carizon.com</a>）</span><span><sup>3</sup> 杭州电子科技大学（<a href="https://www.hdu.edu.cn/">hdu.edu.cn</a>）</span></p>
+        <p class="paper-availability">PDF 尚未发布</p>
+      </div>
+      <!-- <div class="hero-bottom">
+        <div class="hero-description">
+          <p class="hero-en">AuraSplat<br>技术概览</p>
+          <p>输入多视角驾驶图像和一张来自任意场景的参考图像，AuraSplat 将场景重建为 3D 高斯，并在一次前馈推理中把参考外观迁移到所有相机与时间步。</p>
+        </div>
+        <div class="hero-actions"><a class="button button-dark" href="#method">方法 <span aria-hidden="true">↗</span></a><a class="button button-outline" href="#results">结果 <span aria-hidden="true">↓</span></a></div>
+      </div> -->
+      <!-- <div class="hero-media" data-media-slot="hero" data-media-label="AuraSplat 概览" data-media-aspect="wide">
+        <div class="hero-media-inner">
+          <div class="hero-grid" aria-hidden="true"></div>
+          <div class="hero-rings" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div class="hero-cross hero-cross-one" aria-hidden="true">+</div><div class="hero-cross hero-cross-two" aria-hidden="true">+</div>
+          <div class="hero-media-top"><span>项目概览 / 01</span><span>参考图像 → 驾驶场景</span></div>
+          <div class="hero-media-center"><span class="play-outline" aria-hidden="true">◎</span><strong>AuraSplat 概览</strong><span>示意图占位</span></div>
+          <div class="hero-media-bottom"><span>多视角输入 <b>→</b> 高斯场景 <b>→</b> 参考条件外观</span><span>论文插图</span></div>
+        </div>
+      </div> -->
+      <!-- <p class="media-caption"><span><span class="caption-dot"></span> 参考图像条件的外观迁移</span><span>一张参考图 · 所有相机</span></p> -->
+    </section>
+
+    <section class="section intro-section" id="overview" aria-labelledby="overview-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">01 / 项目概览</span><span class="aside-line"></span><span class="aside-note">研究动机</span></div>
+        <div class="section-main">
+          <p class="eyebrow">问题定义</p>
+          <h2 id="overview-title">从采集外观<br>到 <span class="text-muted">可控的驾驶场景。</span></h2>
+          <div class="intro-copy">
+            <p class="lead">目标：把前馈重建的驾驶场景适配到该地点从未观测过的参考外观。</p>
+            <p>驾驶仿真需要在降雨、降雪、夜间等稀有条件下测试感知系统。前馈高斯重建速度很快，但只能复现采集时的天气与光照；为每个地点补齐所有天气既昂贵又常常不可行。逐相机独立做扩散编辑速度慢，重叠区域还容易出现外观不一致；逐场景优化则成本更高。</p>
+            <p>AuraSplat 只重建一次场景，再通过一张可以来自不同场景的参考图迁移外观。微调后的 DINOv2 将参考图编码为全局外观码，一个轻量 MLP 把它转换为通道级调制参数，作用于场景 token 与颜色解码器的多个阶段；颜色解码器输出逐像素、有界的 RGB 增益与偏置图，在保持几何、不透明度和相机位姿不变的前提下更新高斯颜色。</p>
+          </div>
+          <figure class="source-figure overview-figure">
+            <div class="source-figure-heading"><span>项目概览</span></div>
+            <a href="./assets/figures/overview_teaser.jpg" aria-label="查看 AuraSplat teaser 原图"><img src="./assets/figures/overview_teaser.jpg" width="1800" height="646" loading="lazy" alt="AuraSplat teaser：多视角图像重建出几何与外观，参考图分别指定日落、雪天、夜晚和雨天外观，并进行多视角渲染。"></a>
+            <figcaption>一次重建，多种外观。同一几何在日落、雪天、夜晚与雨天条件下渲染，每个条件只需一张参考图，仅高斯颜色发生变化。</figcaption>
+          </figure>
+          <div class="principles" aria-label="核心技术">
+            <article><span class="principle-index">01 / 重建</span><h3>前馈高斯</h3><p>冻结的 Pi3 主干提供深度与多尺度特征，可训练的高斯头在一次前向中构建场景，无需逐场景优化。</p></article>
+            <article><span class="principle-index">02 / 条件</span><h3>全局外观码</h3><p>DINOv2 多层 CLS token 拼接成 高维参考码，被所有相机和所有高斯共享。</p></article>
+            <article><span class="principle-index">03 / 迁移</span><h3>有界 RGB 更新</h3><p>参考条件化的 AdaLN 与颜色解码器预测增益、偏置图，只调整高斯颜色，保持场景几何。</p></article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section method-section" id="method" aria-labelledby="method-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">02 / 方法架构</span><span class="aside-line"></span><span class="aside-note">实现方式</span></div>
+        <div class="section-main">
+          <p class="eyebrow">双分支设计</p>
+          <h2 id="method-title">参考图像条件化的<br>外观迁移。</h2>
+          <div class="intro-copy">
+            <p class="lead">重建分支构建高斯场景，外观分支用一张参考图控制它的颜色。</p>
+            <p><strong>阶段 I · 重建。</strong> 同步相机图像输入冻结的 Pi3 主干，得到逐视角深度图与多尺度特征；可训练的高斯头将这些输出构建为共享的高斯场景。</p>
+            <p><strong>阶段 II · 外观。</strong> 参考图（可以来自不同场景）经微调的 DINOv2-S/14 编码为全局码。该码通过自适应层归一化调制场景内容 token，并条件化 DPT 风格颜色解码器的多个阶段。解码器预测逐像素对齐的 RGB 增益与偏置图，更新生成该像素的高斯颜色。</p>
+          </div>
+          <figure class="pipeline-figure">
+            <a href="./assets/figures/pipeline.png" aria-label="查看 AuraSplat 流程图原图"><img src="./assets/figures/pipeline.png" width="2000" height="835" loading="lazy" alt="AuraSplat 流程：多视角图像经冻结的 Pi3 主干与高斯头构建场景；参考图经 DINOv2 编码为全局外观码，调制内容 token 和颜色解码器的多个阶段，预测 RGB 增益与偏置。"></a>
+            <figcaption>多视角图像 → 冻结的 Pi3 主干 → 高斯头。<br>参考图 → DINOv2 → 全局码 → AdaLN 与颜色解码器 → 高斯颜色的有界 RGB 更新。</figcaption>
+          </figure>
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">动机</span><h3>天气编辑具有共享方向</h3></div><p>在大量编辑样本上，同一天气引起的特征变化在不同场景间高度相关。这说明可以用全局外观码做条件，同时保留源视角特征来决定变化在局部如何体现。</p></div>
+            <figure class="source-figure compact-figure">
+              <div class="source-figure-heading"><span>编辑方向 / PCA</span></div>
+              <a href="./assets/figures/pca.png" aria-label="查看特征变化 PCA 原图"><img src="./assets/figures/pca.png" width="1200" height="572" loading="lazy" alt="平均特征差的 PCA，箭头标出各天气均值。"></a>
+              <figcaption>平均特征差的 PCA，箭头为天气均值。同一天气类别的编辑方向在场景之间共享。</figcaption>
+            </figure>
+          </div>
+
+          
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">高斯颜色更新</span><h3>几何保持不变</h3></div><p>每个高斯保留其生成相机、生成像素和源颜色。预测系数被逐通道限制。最后一层卷积零初始化，因此分支从源颜色出发，且只更新 RGB。</p></div>
+          </div>
+
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">训练目标</span><h3>用编辑视图做监督</h3></div><p>源图像监督重建并保持原始外观，编辑目标监督外观迁移。目标可以来自逐视角独立编辑，也可以来自基于 LiDAR 深度构建的共享柱面画布，后者为扩散模型提供重叠相机的公共上下文。参考图由目标经过简单增广合成，损失由重建项与感知项组成。</p></div>
+            <figure class="source-figure compact-figure">
+              <div class="source-figure-heading"><span>训练目标</span></div>
+              <a href="./assets/figures/aug_compare.jpg" aria-label="查看训练目标对比原图"><img src="./assets/figures/aug_compare.jpg" width="1200" height="1328" loading="lazy" alt="前视、左前、右前视角在编辑前、逐视角独立编辑后与共享画布编辑后的对比。"></a>
+              <figcaption>前视、左前、右前视角：编辑前、独立编辑后、共享画布编辑后。共享画布使重叠区域保持一致。</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section results-section" id="results" aria-labelledby="results-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">03 / 实验结果</span><span class="aside-line"></span><span class="aside-note">实验评估</span></div>
+        <div class="section-main">
+          <div class="section-heading-row results-heading"><div><p class="eyebrow">实验结果</p><h2 id="results-title">跨相机、跨帧、<br>跨场景的外观迁移。</h2></div></div>
+
+          
+
+          
+
+          
+
+          
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>定性对比</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="qualitative" viewBox="0 0 926.00 868.00" style="max-width:900px">
+  <text x="78.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">origin</text>
+  <text x="232.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Stylos</text>
+  <text x="386.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">WildSplatter</text>
+  <text x="540.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Styl3R</text>
+  <text x="694.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">Ours</text>
+  <text x="848.00" y="13.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">target</text>
+  <image x="4.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/ca930595bcfe.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/fd57c990c035.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2e4411192b01.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/9fb606daf0b7.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/0f558deb784e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="22.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/910b90659ab3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/641d025c9c63.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/acf90cf30546.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b8556f8f9a87.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b9f4c7627097.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4eaca80e9595.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="128.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d6700d4d3a73.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4edf2b167a6d.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/3db09b629d2b.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/73b1e354d81f.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/cbb1320a24f3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/4716876f2aa8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="234.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6cbe3dbd309c.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6e2b293f9c24.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d788d573941a.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c889efde8af6.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/eb6d4a7a25a8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2614d062053e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="340.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/87dd0ad5359e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/5a33fb66cea6.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/06fbc4b73bff.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/88ccba50b0fe.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/471dd88b4195.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/61d842434bf3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="446.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d80cbbc4e4a3.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/e581e0a37652.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/f386e263002e.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b6c3f21f1c92.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c0faf8ce5188.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/d90cb3a81331.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="552.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/0bb03e0dfe8c.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/8a184deb3022.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/9b67ec0e2106.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/651538c2d5e8.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/98dc211dc633.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/40f3b0a2e1f9.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="658.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/6378c6cc5ec9.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="4.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/7ba8dd979805.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="158.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/2b089dcda318.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="312.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/b8af2a820507.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="466.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/c459a59529f0.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="620.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/8d72561e499d.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <image x="774.00" y="764.00" width="148.00" height="100.00" href="assets/figures/drawio/qualitative/5725e06abd35.jpg" preserveAspectRatio="xMidYMid slice"/>
+</svg>
+            <figcaption>源图、Stylos、WildSplatter、Styl3R、AuraSplat 与参考/目标。AuraSplat 能复现日落的暖色调与夜晚的暗部，同时保留建筑、植被和车辆细节。</figcaption>
+          </figure>
+
+          
+
+          <figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>外观插值</span></div>
+            <a href="./assets/figures/interpolation.jpg" aria-label="查看外观插值原图"><img src="./assets/figures/interpolation.jpg" width="1600" height="1623" loading="lazy" alt="在晴天、雪天、阴天和日落参考之间插值，同一重建场景的天空颜色与光照逐渐变化。"></a>
+            <figcaption>在参考条件之间插值，同一重建场景的天空颜色、光照和表面外观逐渐变化；参考图来自不同场景。</figcaption>
+          </figure>
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>新视角</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="novel view" viewBox="0 0 1148.00 412.00" style="max-width:1000px">
+  <image x="248.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/c84ad3360ea3.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/cf2220b61f05.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="0.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/e0c1769da8f3.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b1743de4cf50.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/d2f07fbf3e5c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="104.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/d83d40e9e2c6.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/a32caa4ad03a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="96.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b4c71f59f5e0.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/1d0058e10aa5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="248.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/f2163cc59770.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="208.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/f74bc1023d01.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="400.00" y="312.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/476e22b4a577.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="90.00" y="258.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">left shift 2m</text>
+  <text x="90.00" y="362.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">right shift 2m</text>
+  <image x="690.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/882be68a71a5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="690.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/bdc24e59592a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="690.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/399202dc9837.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="778.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/5d88e385f9ef.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/b8fed2f950be.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/62c174458535.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="842.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/48a39a602572.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="930.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/8b3c724f267d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="52.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/8c8a5544cf9c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="156.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/3d2e27d0e931.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="994.00" y="260.00" width="148.00" height="100.00" href="assets/figures/drawio/novel_view/50341dd3757c.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="1082.00" y="112.00" width="60.00" height="40.00" href="assets/figures/drawio/novel_view/fce0b1dd2bf1.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="684.00" y="206.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">left shift 2m</text>
+  <text x="684.00" y="310.00" text-anchor="end" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12">right shift 2m</text>
+</svg>
+            <figcaption>相机位姿横向平移后的渲染。外观迁移在多个平移视角与相机之间保持一致。</figcaption>
+          </figure>
+<figure class="source-figure result-figure">
+            <div class="source-figure-heading"><span>时序与多相机</span></div>
+                        <svg class="drawio-svg" role="img" aria-label="nuscene" viewBox="0 0 530.00 542.00" style="max-width:626px">
+  <image x="216.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/a914cd9fdfed.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/c01a0b092aaf.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="136.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/f6e53f936b4f.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/0342d7fabe46.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/5de1d2cc04f8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="236.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/2e11cfe4a25b.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/f0798beb9e75.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/4ece7f6a25e5.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="36.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/de6b685baa1a.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/144adcf6efa1.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/57f87303a77d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="336.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/72703fac5de4.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/4eeb8591d47b.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/7520058ab08d.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="436.00" width="148.00" height="100.00" href="assets/figures/drawio/nuscene/bf21275874ff.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="56.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="216.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <image x="376.00" y="87.67" width="70.00" height="46.67" href="assets/figures/drawio/nuscene/89355ebbc9e8.jpg" preserveAspectRatio="xMidYMid meet"/>
+  <text x="130.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front Left</text>
+  <text x="290.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front</text>
+  <text x="450.00" y="21.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">Front Right</text>
+  <text x="34.00" y="86.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=0s</text>
+  <text x="34.00" y="186.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=0s</text>
+  <text x="34.00" y="286.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=4s</text>
+  <text x="34.00" y="386.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=8s</text>
+  <text x="34.00" y="486.00" text-anchor="middle" dominant-baseline="central" font-family="Times New Roman, DejaVu Serif, serif" font-size="12.0" font-weight="700">T=12s</text>
+</svg>
+            <figcaption>在 Waymo 上训练的模型直接用于 nuScenes。列为左前、前、右前；顶部为源图，下方为同一参考下连续时间戳的迁移结果。</figcaption>
+          </figure>
+          
+
+
+
+          
+
+          
+
+          <section class="paper-section">
+            <div class="paper-heading"><div><span class="tech-kicker">增广示例</span><h3>同一套参考用于不同场景</h3></div><p>Waymo 与 nuScenes 场景在同样参考图下的结果；每行依次为源图与参考条件结果。</p></div>
+            <div class="paper-image-grid two-up">
+              <figure class="paper-tile"><a href="./assets/figures/aug_s3.jpg" aria-label="View the Waymo · s3 panel"><img src="./assets/figures/aug_s3.jpg" width="1200" height="1374" loading="lazy" alt="Waymo 场景，参考条件。"></a><figcaption>Waymo · s3</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_s0.jpg" aria-label="View the Waymo · s0 panel"><img src="./assets/figures/aug_s0.jpg" width="1200" height="1374" loading="lazy" alt="Waymo 场景，参考条件。"></a><figcaption>Waymo · s0</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_s6.jpg" aria-label="View the Waymo · s6 panel"><img src="./assets/figures/aug_s6.jpg" width="1200" height="1374" loading="lazy" alt="Waymo 场景，参考条件。"></a><figcaption>Waymo · s6</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n0.jpg" aria-label="View the nuScenes · n0 panel"><img src="./assets/figures/aug_n0.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes 场景，参考条件。"></a><figcaption>nuScenes · n0</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n1.jpg" aria-label="View the nuScenes · n1 panel"><img src="./assets/figures/aug_n1.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes 场景，参考条件。"></a><figcaption>nuScenes · n1</figcaption></figure>
+              <figure class="paper-tile"><a href="./assets/figures/aug_n3.jpg" aria-label="View the nuScenes · n3 panel"><img src="./assets/figures/aug_n3.jpg" width="1200" height="1374" loading="lazy" alt="nuScenes 场景，参考条件。"></a><figcaption>nuScenes · n3</figcaption></figure>
+            </div>
+            <p class="tech-caption">每行为前视相机；完整面板左侧标注了该行使用的参考图。</p>
+          </section>
+                    <section class="paper-section video-section">
+            <div class="paper-heading"><div><span class="tech-kicker">视频结果</span><h3>序列上的外观迁移。</h3></div><p>一条 front 相机长条覆盖所有场景与条件，另外每个场景一个三机位视频。</p></div>
+            <figure class="source-figure video-figure">
+              <div class="source-figure-heading"><span>FRONT 相机 · 所有条件</span><span>所有场景</span></div>
+              <video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/front_strip.jpg" aria-label="front 相机长条视频">
+                <source src="./assets/videos/front_strip.mp4" type="video/mp4">
+              </video>
+              <figcaption>依次展示每个场景；列为源图、clean（仅 nuScenes）和各种参考，均使用 front 相机。</figcaption>
+            </figure>
+            <div class="paper-image-grid two-up">
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_s3.jpg" aria-label="三机位视频, Waymo · s3"><source src="./assets/videos/three_view_s3.mp4" type="video/mp4"></video><figcaption>Waymo · s3</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_s0.jpg" aria-label="三机位视频, Waymo · s0"><source src="./assets/videos/three_view_s0.mp4" type="video/mp4"></video><figcaption>Waymo · s0</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_n0.jpg" aria-label="三机位视频, nuScenes · n0"><source src="./assets/videos/three_view_n0.mp4" type="video/mp4"></video><figcaption>nuScenes · n0</figcaption></figure>
+              <figure class="paper-tile video-tile"><video autoplay muted loop controls playsinline preload="metadata" poster="./assets/videos/three_view_n1.jpg" aria-label="三机位视频, nuScenes · n1"><source src="./assets/videos/three_view_n1.mp4" type="video/mp4"></video><figcaption>nuScenes · n1</figcaption></figure>
+            </div>
+            <p class="tech-caption">每个视频只播放一遍时间轴：随着时间推进依次切换条件（源图 → clean（仅 nuScenes）→ 各种参考），列为前视相机。</p>
+          </section>
+<details class="paper-case metrics-fold"><summary>定量结果</summary><div class="paper-case-content">
+<div class="reported-results" aria-labelledby="reported-results-title">
+            <div class="reported-header"><div><span class="tech-kicker">主要结果</span><h3 id="reported-results-title">结果摘要</h3></div></div>
+            <div class="reported-grid">
+              <article><strong>23.34 dB ↑</strong><span>PSNR · 对齐参考下的迁移结果</span><small>Stylos 在相同分辨率下为 18.77 dB</small></article>
+              <article><strong>0.766 ↑</strong><span>边缘相关性</span><small>Stylos 为 0.547；源渲染为 0.845</small></article>
+              <article><strong>+9.22 dB ↑</strong><span>相对源渲染的提升</span><small>WildSplatter +5.00，Stylos +4.77</small></article>
+              <article><strong>0.64–0.68 s</strong><span>H20-3e 上的完整流程耗时</span><small>包含重建、参考编码与十次渲染</small></article>
+            </div>
+            <p>参考条件迁移以扩散编辑结果为评测目标，源渲染是同一重建在迁移前的结果。</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>外观迁移对比</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="外观迁移对比" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">方法</th><th scope="col">输出</th><th scope="col">PSNR ↑</th><th scope="col">Edge ↑</th><th scope="col">CLIP ↑</th></tr></thead>
+                <tbody>
+                  <tr><th scope="rowgroup" colspan="5">对齐参考 · 518 × 350</th></tr>
+                  <tr><th scope="row">WildSplatter</th><td>源</td><td>13.47</td><td>0.810</td><td>0.7689</td></tr>
+                  <tr><th scope="row">WildSplatter</th><td>迁移</td><td>18.47</td><td>0.498</td><td>0.7804</td></tr>
+                  <tr><th scope="row">Stylos</th><td>源</td><td>14.00</td><td>0.846</td><td>0.8403</td></tr>
+                  <tr><th scope="row">Stylos</th><td>迁移</td><td>18.77</td><td>0.547</td><td>0.8193</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>源</td><td>14.12</td><td>0.845</td><td>0.8384</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>迁移</td><td><strong>23.34</strong></td><td><strong>0.766</strong></td><td><strong>0.9128</strong></td></tr>
+                  <tr><th scope="rowgroup" colspan="5">对齐参考 · 256 × 256</th></tr>
+                  <tr><th scope="row">Styl3R</th><td>源</td><td>12.55</td><td>0.748</td><td>0.8358</td></tr>
+                  <tr><th scope="row">Styl3R</th><td>迁移</td><td>17.75</td><td>0.828</td><td>0.8684</td></tr>
+                  <tr><th scope="rowgroup" colspan="5">跨场景参考 · 518 × 350</th></tr>
+                  <tr><th scope="row">AuraSplat</th><td>迁移</td><td>20.16</td><td>0.746</td><td>0.9015</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">对齐参考：以当前帧的编辑目标作为参考；跨场景：每种天气使用来自不同场景的固定参考图。AuraSplat 在保持重建质量（源行）的同时提升迁移保真度。</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>分天气结果</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="分天气外观迁移结果" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">天气（帧数）</th><th scope="col">AuraSplat PSNR</th><th scope="col">AuraSplat Edge</th><th scope="col">WildSplatter PSNR</th><th scope="col">WildSplatter Edge</th><th scope="col">Stylos PSNR</th><th scope="col">Stylos Edge</th><th scope="col">Styl3R PSNR</th><th scope="col">Styl3R Edge</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">夜晚（2017）</th><td>24.47</td><td>0.580</td><td>21.62</td><td>0.261</td><td>20.88</td><td>0.351</td><td>19.84</td><td>0.654</td></tr>
+                  <tr><th scope="row">日落（1522）</th><td>24.71</td><td>0.884</td><td>18.41</td><td>0.599</td><td>19.10</td><td>0.648</td><td>19.62</td><td>0.892</td></tr>
+                  <tr><th scope="row">降雨（1453）</th><td>21.54</td><td>0.769</td><td>17.46</td><td>0.551</td><td>17.50</td><td>0.565</td><td>17.09</td><td>0.849</td></tr>
+                  <tr><th scope="row">降雪（1514）</th><td>22.34</td><td>0.803</td><td>16.85</td><td>0.650</td><td>17.55</td><td>0.647</td><td>14.64</td><td>0.918</td></tr>
+                  <tr><th scope="row">晴天（1370）</th><td>23.17</td><td>0.866</td><td>16.77</td><td>0.510</td><td>18.01</td><td>0.595</td><td>16.72</td><td>0.893</td></tr>
+                  <tr><th scope="row">加权平均</th><td><strong>23.34</strong></td><td><strong>0.766</strong></td><td>18.47</td><td>0.498</td><td>18.77</td><td>0.547</td><td>17.75</td><td>0.828</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">每帧以自身的编辑前视图作为参考，并与该目标比较。Styl3R 渲染分辨率为 256 × 256，其余方法为 518 × 350。</p>
+          </div>
+<div class="result-table-block">
+            <div class="result-table-title"><h3>重建质量</h3></div>
+            <div class="tensor-table-wrap" role="region" aria-label="重建质量对比" tabindex="0">
+              <table class="tensor-table">
+                <thead><tr><th scope="col">方法</th><th scope="col">PSNR ↑</th><th scope="col">SSIM ↑</th><th scope="col">LPIPS ↓</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">MVSplat</th><td>22.04</td><td>0.68</td><td>0.34</td></tr>
+                  <tr><th scope="row">DepthSplat</th><td>23.86</td><td>0.70</td><td>0.31</td></tr>
+                  <tr><th scope="row">UniSplat</th><td>25.98</td><td>0.76</td><td>0.24</td></tr>
+                  <tr><th scope="row">AuraSplat</th><td>25.45</td><td><strong>0.77</strong></td><td><strong>0.23</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="tech-caption">在后续时间戳的多个相机位姿上渲染原始外观，遵循 UniSplat 评测协议；基线数值来自 UniSplat。</p>
+          </div>
+</div></details>
+
+          
+
+          
+        </div>
+      </div>
+    </section>
+
+    <section class="section details-section" id="details" aria-labelledby="details-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">04 / 实现细节</span><span class="aside-line"></span><span class="aside-note">配置与评估</span></div>
+        <div class="section-main">
+          <p class="eyebrow">实现与评估</p>
+          <h2 id="details-title">实现配置与评估口径。</h2>
+          <div class="spec-grid">
+            <article><span class="spec-id">A / 几何</span><h3>Pi3 + 高斯头</h3><p>同步相机输入冻结的 Pi3 主干，可训练的高斯头构建场景。在 Waymo 上，原始外观重建达到 25.45 dB PSNR、0.77 SSIM 和 0.23 LPIPS。</p><div class="spec-foot">冻结 PI3 · 可训练高斯头 · 5 视角</div></article>
+            <article><span class="spec-id">B / 外观分支</span><h3>26.59 M 参数</h3><p>微调的 DINOv2-S/14 从 {2, 5, 8, 11} 层提取 高维参考码。分支包含 11.58 M 条件 MLP、9.55 M 颜色解码器、4.20 M 内容投影和 0.79 M 参考投影。</p><div class="spec-foot">DINOV2-S/14 · ADALN · 3 阶段</div></article>
+            <article><span class="spec-id">C / 训练与速度</span><h3>0.64–0.68 s</h3><p>模型总参数 1,148.88 M，其中 175.46 M 可训练，训练五个 epoch。在 H20-3e GPU 上、batch size 为 1 时，单个外观条件的完整流程耗时 0.64–0.68 s。</p><div class="spec-foot">1.15 B 总量 · 5 EPOCHS · H20-3E</div></article>
+          </div>
+          <div class="scope-note"><strong>评估范围</strong><p>迁移指标使用 202 个 Waymo 场景的 7,876 个评测样本，在前视相机 518 × 350 分辨率上与扩散编辑目标比较。</p></div>
+          <div class="technical-link"><div><span>了解方法</span><p>阅读流程、调制与训练细节。</p></div><a href="#method">查看方法 <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section limitations-section" id="limitations" aria-labelledby="limitations-title">
+      <div class="wrap section-layout">
+        <div class="section-aside"><span class="section-number">05 / 讨论</span><span class="aside-line"></span><span class="aside-note">局限与问答</span></div>
+        <div class="section-main">
+          <p class="eyebrow">局限与设计取舍</p>
+          <h2 id="limitations-title">失败案例与技术讨论。</h2>
+          <p class="body-copy">外观泛化能力取决于训练分布。方法只更新 RGB，因此提供的是全局参考控制，缺少显式的材质或空间变化光照控制。动态物体依赖重建与扩散目标的质量，新视角可能暴露重建空洞。</p>
+          <div class="failure-cases">
+            <span class="tech-kicker">讨论</span>
+            <details class="paper-case" open><summary>动态物体和实例编辑</summary><div class="paper-case-content"><p class="paper-copy">运动物体继承重建与编辑目标中的误差；当前的外观更新是全局的，一张参考图决定整个场景的外观，因此无法为不同物体或区域分别指定外观。</p></div></details>
+            <details class="paper-case"><summary>参考图的具体性</summary><div class="paper-case-content"><p class="paper-copy">不同的同天气参考图会产生不同输出。不同参考图会改变色调与亮度，但变化幅度仍远小于源外观到目标的改变；天气类别仍占主导。</p></div></details>
+            <details class="paper-case"><summary>新视角</summary><div class="paper-case-content"><p class="paper-copy">在远离输入位姿处渲染，或填补从未观测到的区域时，可能暴露重建空洞，外观迁移无法修复。</p></div></details>
+          </div>
+          <div class="technical-section">
+            <div class="technical-section-header"><div><span class="tech-kicker">常见问题</span><h3>问答</h3></div><p>关于评测口径的简短回答。</p></div>
+            <details class="paper-case"><summary>推理时需要逐场景优化吗？</summary><div class="paper-case-content"><p class="paper-copy">不需要。重建和外观迁移都是前馈的。</p></div></details>
+            <details class="paper-case"><summary>参考图必须来自同一场景吗？</summary><div class="paper-case-content"><p class="paper-copy">不需要。参考图可以来自不同场景；模型仍会按照它的外观进行迁移，只是匹配程度不如参考图与场景相对应时精确。</p></div></details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing-section">
+      <div class="wrap closing-inner">
+        <div><p class="eyebrow">AURASPLAT / 技术总结</p><h2>图像条件外观。<br><span>前馈高斯渲染。</span></h2></div>
+        <div class="closing-right"><p>AuraSplat</p><a href="#top">回到顶部 <span aria-hidden="true">↑</span></a></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner"><span class="footer-brand">AuraSplat<span>.</span></span><p>AuraSplat · 驾驶场景外观迁移研究。</p><span>PROJECT PAGE</span></div>
+  </footer>
+</body>
+</html>
