@@ -8,10 +8,10 @@
 /* Technical content: restrained typography and readable implementation details. */
 .hero h1.technical-hero-title{font-size:clamp(45px,5.2vw,78px);letter-spacing:-.055em;line-height:1.2}
 .technical-section{margin-top:64px;padding-top:30px;border-top:1px solid #d4e1d7}
-.technical-section-header{display:flex;justify-content:space-between;align-items:flex-end;gap:30px;margin-bottom:25px}
+.technical-section-header{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);align-items:start;gap:clamp(24px,4vw,56px);margin-bottom:25px}
 .tech-kicker{font:10px var(--mono);letter-spacing:.1em;color:#4c7a65}
 .technical-section-header h3{font-size:25px;letter-spacing:-.035em;margin:12px 0 0}
-.technical-section-header>p{max-width:280px;color:#657b6d;font-size:12px;line-height:1.8;margin:0}
+.technical-section-header>p{max-width:65ch;color:#657b6d;font-size:15px;line-height:1.8;margin:0}
 .technical-section code,.scope-note code{font-family:var(--mono);font-size:.94em;color:#31594a;overflow-wrap:anywhere}
 .tensor-table-wrap{overflow-x:auto;border:1px solid #dbe6dd;border-radius:4px;background:#f8faf7}
 .tensor-table-wrap:focus-visible{outline:3px solid #5aa494;outline-offset:3px}
@@ -128,7 +128,7 @@ h2,.section-main h2,.closing-section h2{font-size:clamp(30px,3vw,40px);line-heig
 .hero-en,.intro-copy .lead{font-size:18px}
 .project-authors{font-size:16px}
 .hero-description p:last-child,.intro-copy p,.body-copy,.principles p,.method-details p,.tech-columns p,.inference-paths p,.spec-grid p,.faq-block details p,.paper-copy,.paper-heading>p,.scope-note p{font-size:15px;line-height:1.8}
-.project-affiliations,.heading-note,.technical-section-header>p,.technical-link p,.diagram-rail>p,.architecture-board>p,.formula-block p{font-size:14px}
+.project-affiliations,.heading-note,.technical-link p,.diagram-rail>p,.architecture-board>p,.formula-block p{font-size:14px}
 .button,.technical-link>a,.closing-right a,.paper-case summary,.faq-block summary,.method-details h3,.tech-columns h4,.inference-paths h4,.principles h3,.scope-note strong{font-size:15px}
 .board-header strong,.pipeline-node h3,.pipeline-output h3,.diagram-steps strong,.architecture-steps strong{font-size:14px;line-height:1.5;overflow-wrap:anywhere}
 .tensor-table{font-size:14px}.tensor-table thead th{font-size:13px}
@@ -176,6 +176,8 @@ html[lang="en"] .range-rows{min-width:700px}
 /* Match the demonstration video's 16:9 frame on desktop and mobile. */
 .hero-media{aspect-ratio:16/9;height:auto;min-height:0}
 .hero-media .media-element{aspect-ratio:16/9;height:auto}
+/* Avoid crowding the placeholder's message on narrow screens. */
+@media(max-width:600px){.hero-media-bottom{display:none}}
 /* Keep this font scale in sync with the cue measurement in site.js. */
 .hero-media video::cue{font-family:Arial,sans-serif;font-size:clamp(12px,1.4vw,24px)}
 

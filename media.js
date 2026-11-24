@@ -3,12 +3,11 @@
  * Paths are relative to index.html.
  */
 window.LIDARGEN_MEDIA = {
-  'hero': {
-    type: 'image',
-    src: './assets/figures/hero.jpg',
-    altEn: 'Teaser: one reconstruction rendered under several reference appearances',
-    altZh: 'Teaser：同一重建在多种参考外观下的渲染',
-  },
+  // Keep the demonstration placeholder until a project video is available.
+  // To publish the video, replace null with:
+  // { type: 'video', src: './assets/videos/project-demo.mp4',
+  //   altEn: 'AuraSplat project demonstration', altZh: 'AuraSplat 项目演示' }
+  'hero': null,
   'results-feature': null,
   'nuscenes-01': null,
   'nuscenes-02': null,

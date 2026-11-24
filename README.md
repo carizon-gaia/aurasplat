@@ -27,3 +27,5 @@ Open <http://localhost:8011/> for the English page or <http://localhost:8011/ind
 Publish the repository's root directory from the default branch using **Settings → Pages → Deploy from a branch**. For a project repository, the site is served at `https://<owner>.github.io/<repository>/`; the Chinese page is at `https://<owner>.github.io/<repository>/index-zh.html`.
 
 Before publishing, verify the author information and that the paper content and all figures, videos, and logos are cleared for public release. When the paper and code URLs are available, update both HTML pages.
+
+The project demonstration video is currently a placeholder. When the video is ready, add it under `assets/videos/` and update the `hero` entry in `media.js` as described in the comments there; both language pages will use it.
